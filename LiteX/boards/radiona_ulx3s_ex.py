@@ -29,7 +29,8 @@ def new_platform_init(self, device="LFE5U-45F", revision="2.0", toolchain="trell
         _io = ulx3s_platform._io_common + \
               {"1.7": ulx3s_platform._io_1_7, "2.0": ulx3s_platform._io_2_0}[revision] + \
               [("wifi_en", 0, Pins("F1"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP"), Misc("DRIVE=4"))]
-        LatticePlatform.__init__(self, device + "-6BG381C", _io, toolchain=toolchain, **kwargs)
+        LatticePlatform.__init__(
+            self, f"{device}-6BG381C", _io, toolchain=toolchain, **kwargs)
     
 ulx3s_platform.Platform.__init__ = new_platform_init
 
@@ -86,53 +87,55 @@ class BaseSoC(ulx3s.BaseSoC):
 # Build -------------------------------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="LiteX SoC on ULX3S")
-    parser.add_argument("--build",           action="store_true",   help="Build bitstream.")
-    parser.add_argument("--load",            action="store_true",   help="Load bitstream.")
-    parser.add_argument("--toolchain",       default="trellis",     help="FPGA toolchain (trellis or diamond).")
-    parser.add_argument("--device",          default="LFE5U-45F",   help="FPGA device (LFE5U-12F, LFE5U-25F, LFE5U-45F or LFE5U-85F).")
-    parser.add_argument("--revision",        default="2.0",         help="Board revision (2.0 or 1.7).")
-    parser.add_argument("--sys-clk-freq",    default=50e6,          help="System clock frequency.")
-    parser.add_argument("--sdram-module",    default="MT48LC16M16", help="SDRAM module (MT48LC16M16, AS4C32M16 or AS4C16M16).")
-    parser.add_argument("--with-spi-flash",  action="store_true",   help="Enable SPI Flash (MMAPed).")
-    parser.add_argument("--with-oled",       action="store_true",   help="Enable SDD1331 OLED support.")
-    parser.add_argument("--sdram-rate",      default="1:2",         help="SDRAM Rate (1:1 Full Rate or 1:2 Half Rate).")
-    builder_args(parser)
-    soc_core_args(parser)
-    trellis_args(parser)
-    args = parser.parse_args()
+        parser = argparse.ArgumentParser(description="LiteX SoC on ULX3S")
+        parser.add_argument("--build",           action="store_true",   help="Build bitstream.")
+        parser.add_argument("--load",            action="store_true",   help="Load bitstream.")
+        parser.add_argument("--toolchain",       default="trellis",     help="FPGA toolchain (trellis or diamond).")
+        parser.add_argument("--device",          default="LFE5U-45F",   help="FPGA device (LFE5U-12F, LFE5U-25F, LFE5U-45F or LFE5U-85F).")
+        parser.add_argument("--revision",        default="2.0",         help="Board revision (2.0 or 1.7).")
+        parser.add_argument("--sys-clk-freq",    default=50e6,          help="System clock frequency.")
+        parser.add_argument("--sdram-module",    default="MT48LC16M16", help="SDRAM module (MT48LC16M16, AS4C32M16 or AS4C16M16).")
+        parser.add_argument("--with-spi-flash",  action="store_true",   help="Enable SPI Flash (MMAPed).")
+        parser.add_argument("--with-oled",       action="store_true",   help="Enable SDD1331 OLED support.")
+        parser.add_argument("--sdram-rate",      default="1:2",         help="SDRAM Rate (1:1 Full Rate or 1:2 Half Rate).")
+        builder_args(parser)
+        soc_core_args(parser)
+        trellis_args(parser)
+        args = parser.parse_args()
 
-    # AS4C32M16 not supported (refresh timings will not be met with framebuffer DMA active), 
-    # use AS4C16M16 instead
-    assert args.sdram_module != 'AS4C32M16'
-    
-    soc = BaseSoC(
-        device                 = args.device,
-        revision               = args.revision,
-        toolchain              = args.toolchain,
-        sys_clk_freq           = int(float(args.sys_clk_freq)),
-        sdram_module_cls       = args.sdram_module,
-        sdram_rate             = args.sdram_rate,
-        with_video_terminal    = False,
-        with_video_framebuffer = True,
-        with_spi_flash         = args.with_spi_flash,
-        **soc_core_argdict(args))
+        # AS4C32M16 not supported (refresh timings will not be met with framebuffer DMA active), 
+        # use AS4C16M16 instead
+        assert args.sdram_module != 'AS4C32M16'
 
-    soc.add_spi_sdcard(with_tristate=True)
-    if args.with_oled:
-        soc.add_oled()
+        soc = BaseSoC(
+            device                 = args.device,
+            revision               = args.revision,
+            toolchain              = args.toolchain,
+            sys_clk_freq           = int(float(args.sys_clk_freq)),
+            sdram_module_cls       = args.sdram_module,
+            sdram_rate             = args.sdram_rate,
+            with_video_terminal    = False,
+            with_video_framebuffer = True,
+            with_spi_flash         = args.with_spi_flash,
+            **soc_core_argdict(args))
 
-    # add my own modules
-    soc.add_blitter() # provides fast memory fill
-    soc.add_ESP32()   # esp32 on/off + spisdcard tristate control (access SDCard with ftp through wifi !)
-    
-    builder = Builder(soc, **builder_argdict(args))
-    builder_kargs = trellis_argdict(args) if args.toolchain == "trellis" else {}
-    builder.build(**builder_kargs, run=args.build)
+        soc.add_spi_sdcard(with_tristate=True)
+        if args.with_oled:
+            soc.add_oled()
 
-    if args.load:
-        prog = soc.platform.create_programmer()
-        prog.load_bitstream(os.path.join(builder.gateware_dir, soc.build_name + ".svf"))
+        # add my own modules
+        soc.add_blitter() # provides fast memory fill
+        soc.add_ESP32()   # esp32 on/off + spisdcard tristate control (access SDCard with ftp through wifi !)
+
+        builder = Builder(soc, **builder_argdict(args))
+        builder_kargs = trellis_argdict(args) if args.toolchain == "trellis" else {}
+        builder.build(**builder_kargs, run=args.build)
+
+        if args.load:
+                prog = soc.platform.create_programmer()
+                prog.load_bitstream(
+                    os.path.join(builder.gateware_dir,
+                                 f"{soc.build_name}.svf"))
 
 if __name__ == "__main__":
     main()
